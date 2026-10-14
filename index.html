@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="description" content="DDR - Danendra DeadLine Radar: pengingat tugas dan jadwal kuliah.">
+<meta name="theme-color" content="#4f46e5">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="DDR">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>DDR - Danendra DeadLine Radar</title>
 <style>*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}</style>
 </head>
@@ -109,6 +117,18 @@ input:focus,select:focus,textarea:focus{border-color:var(--ac)}
 .tg.on{background:var(--ac)}.tg.on::after{left:21px}
 .toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;z-index:60;display:none;max-width:90vw}
 .bnav{display:none}
+body.auth .side,body.auth .mtop,body.auth .bnav,body.auth .fab{display:none!important}
+body.auth .app{display:block}
+body.auth .main{max-width:none;padding:0}
+.au{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.au .box{width:100%;max-width:380px}
+.au .center{text-align:center}
+.au h1{font-size:22px;margin:0 0 2px}
+.au input[type=text],.au input[type=email],.au input[type=password]{width:100%;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:13px 14px;outline:none;margin-bottom:10px;font-size:16px}
+.au input:focus{border-color:var(--ac)}
+.au .btn{width:100%;min-height:46px;margin-top:4px}
+.au .lk{text-align:center;margin:16px 0 0;color:var(--ac);font-weight:600;cursor:pointer;background:none;border:0;width:100%}
+.au .note{color:var(--mute);font-size:12px;text-align:center;margin-top:18px}
 .mtop,.fab{display:none}
 @media (max-width:760px){
   .app{display:block}
@@ -186,7 +206,7 @@ var VIEWS=[["home","Beranda","home"],["tugas","Tugas","tugas"],["kal","Kalender"
 // ---- State
 var S={tasks:[],name:"",theme:"auto",notif:{h3:true,h1:true,j3:true},ex:false};
 var view="home",calY,calM,calSel,filter="aktif",fSel=null,focus={t:1500,run:false,iv:null,done:0};
-var db=null,docRef=null,saving=false,pending=false,LS="ddr-web-v1";
+var db=null,docRef=null,saving=false,pending=false,LS0="ddr-web-v1",LS="ddr-web-v1",AK="ddr-auth-v1",A={users:[],session:null},screen="app",aerr="";
 var $=function(i){return document.getElementById(i)};
 function esc(s){var d=document.createElement("div");d.textContent=s==null?"":String(s);return d.innerHTML}
 function uid(){return "t"+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
@@ -204,6 +224,14 @@ function apply(o){if(!o||typeof o!=="object")return;
   if(o.theme)S.theme=o.theme;
   if(o.notif)S.notif=Object.assign({h3:true,h1:true,j3:true},o.notif);
   S.ex=!!o.ex}
+function defaults(){S={tasks:[],name:"",theme:S.theme||"auto",notif:{h3:true,h1:true,j3:true},ex:false}}
+function aLoad(){try{var r=localStorage.getItem(AK);if(r){var o=JSON.parse(r);if(o&&Array.isArray(o.users))A=o}}catch(e){}}
+function aSave(){try{localStorage.setItem(AK,JSON.stringify(A))}catch(e){}}
+function hashPw(salt,pw){
+  var s=salt+":"+pw;
+  try{if(window.crypto&&crypto.subtle){return crypto.subtle.digest("SHA-256",new TextEncoder().encode(s)).then(function(b){return Array.prototype.map.call(new Uint8Array(b),function(x){return ("0"+x.toString(16)).slice(-2)}).join("")})}}catch(e){}
+  var x=5381;for(var i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return Promise.resolve("w"+x)}
+function curUser(){return A.users.filter(function(u){return u.email===A.session})[0]||null}
 function lsGet(){try{var r=localStorage.getItem(LS);return r?JSON.parse(r):null}catch(e){return null}}
 function lsSet(){try{localStorage.setItem(LS,JSON.stringify(snapshot()))}catch(e){}}
 function save(){
@@ -214,6 +242,8 @@ function save(){
   docRef.set(snapshot()).then(function(){saving=false;if(pending){pending=false;save()}},function(){saving=false;pending=false});
 }
 async function init(){
+  aLoad();
+  if(curUser()){LS=LS0+":"+A.session;screen="app"}else{LS=LS0;screen=A.users.length?"login":"splash"}
   var l=lsGet();if(l)apply(l);
   themeApply();render();
   try{
@@ -315,9 +345,45 @@ function vFokus(){
   var pct=(1500-focus.t)/1500,C=2*Math.PI*90;
   return '<div class="top"><div><h1>Mode fokus</h1><div class="sub">Teknik Pomodoro 25 menit</div></div></div><div class="card" style="max-width:520px;margin:0 auto"><label class="f" style="margin-top:0">Fokus pada tugas</label><select id="fsel"><option value="">— tanpa tugas —</option>'+act.map(function(t){return '<option value="'+t.id+'"'+(fSel===t.id?" selected":"")+'>'+esc(t.title)+'</option>'}).join("")+'</select><div class="ring"><svg viewBox="0 0 220 220" width="220" height="220"><circle cx="110" cy="110" r="90" fill="none" stroke="var(--line)" stroke-width="10"/><circle id="fring" cx="110" cy="110" r="90" fill="none" stroke="var(--ac)" stroke-width="10" stroke-linecap="round" stroke-dasharray="'+C.toFixed(1)+'" stroke-dashoffset="'+(C*(1-pct)).toFixed(1)+'" transform="rotate(-90 110 110)"/><text id="ftime" x="110" y="124" text-anchor="middle" font-size="44" font-weight="700" fill="var(--ink)" font-family="Inter,sans-serif">'+fmtT(focus.t)+'</text></svg></div><div class="row c"><button class="btn pri" data-fr>'+(focus.run?"Jeda":focus.t<1500&&focus.t>0?"Lanjut":"Mulai")+'</button><button class="btn" data-fx>Atur ulang</button></div><p class="tm" style="text-align:center;margin-top:12px">Sesi selesai hari ini: <b>'+focus.done+'</b></p></div>'}
 function vUser(){
-  return '<div class="top"><div><h1>Profil</h1><div class="sub">Pengaturan DDR</div></div></div><div class="card" style="max-width:520px"><label class="f" style="margin-top:0">Nama panggilan</label><input type="text" id="pname" maxlength="40" value="'+esc(S.name)+'" placeholder="Danendra"><label class="f">Tema</label><div class="seg">'+[["auto","Otomatis"],["light","Terang"],["dark","Gelap"]].map(function(t){return '<button class="'+(S.theme===t[0]?"on":"")+'" data-th="'+t[0]+'">'+t[1]+'</button>'}).join("")+'</div><label class="f">Data</label><div class="row"><button class="btn" data-ex>Muat contoh tugas</button><button class="btn dng" data-clr>Hapus semua tugas</button></div><p class="tm" style="margin-top:14px">'+(docRef?'Datamu tersimpan di akunmu dan ikut ke perangkat lain.':'Datamu tersimpan di browser ini saja.')+'</p></div>'}
+  var cu=curUser();return '<div class="top"><div><h1>Profil</h1><div class="sub">Pengaturan DDR</div></div></div>'+(cu?'<div class="card" style="max-width:520px;margin-bottom:14px"><div class="row" style="justify-content:space-between"><div><b>'+esc(cu.name)+'</b><div class="tm">'+esc(cu.email)+'</div></div><button class="btn" data-logout>Keluar</button></div></div>':'')+'<div class="card" style="max-width:520px"><label class="f" style="margin-top:0">Nama panggilan</label><input type="text" id="pname" maxlength="40" value="'+esc(S.name)+'" placeholder="Danendra"><label class="f">Tema</label><div class="seg">'+[["auto","Otomatis"],["light","Terang"],["dark","Gelap"]].map(function(t){return '<button class="'+(S.theme===t[0]?"on":"")+'" data-th="'+t[0]+'">'+t[1]+'</button>'}).join("")+'</div><label class="f">Data</label><div class="row"><button class="btn" data-ex>Muat contoh tugas</button><button class="btn dng" data-clr>Hapus semua tugas</button></div><p class="tm" style="margin-top:14px">'+(docRef?'Datamu tersimpan di akunmu dan ikut ke perangkat lain.':'Datamu tersimpan di browser ini saja.')+'</p></div>'}
 var V={home:vHome,tugas:vTugas,kal:vKal,mk:vMk,bell:vBell,fokus:vFokus,user:vUser};
+function authView(){
+  var logo='<svg width="88" height="88" viewBox="0 0 72 72" role="img" aria-label="Logo DDR"><rect x="1" y="1" width="70" height="70" rx="16" fill="var(--acbg)" stroke="var(--ac)" stroke-width=".5"/><circle cx="36" cy="36" r="24" fill="none" stroke="var(--ac)" opacity=".5"/><circle cx="36" cy="36" r="14" fill="none" stroke="var(--ac)" opacity=".7"/><line x1="36" y1="36" x2="54" y2="18" stroke="var(--ac)" stroke-width="2.5" stroke-linecap="round"/><circle cx="36" cy="36" r="3.5" fill="var(--ac)"/><circle cx="45" cy="42" r="4" fill="var(--red)"/></svg>';
+  var small=logo.replace('width="88" height="88"','width="56" height="56"');
+  var note='<p class="note">Akun dan data tersimpan di browser ini saja.</p>';
+  var err='<div class="err" id="a-err" role="alert">'+esc(aerr)+'</div>';
+  if(screen==="splash")return '<div class="au"><div class="box center">'+logo+'<p style="margin:14px 0 0;font-size:26px;font-weight:700;letter-spacing:3px">DDR</p><p class="sub" style="margin:0">Danendra DeadLine Radar</p><p style="margin:18px 0 22px;color:var(--mute)">Semua deadline kuliahmu terpantau dalam satu radar.</p><button class="btn pri" data-auth="login">Mulai</button></div></div>';
+  if(screen==="login")return '<div class="au"><div class="box"><div class="center" style="margin-bottom:14px">'+small+'</div><h1>Masuk</h1><p class="sub" style="margin:0 0 16px">Selamat datang kembali di DDR.</p><input type="email" id="a-em" aria-label="Email" placeholder="nama@kampus.ac.id" autocomplete="email"><input type="password" id="a-pw" aria-label="Kata sandi" placeholder="Kata sandi" autocomplete="current-password">'+err+'<button class="btn pri" data-dologin>Masuk</button><button class="lk" data-auth="daftar">Belum punya akun? Daftar</button>'+note+'</div></div>';
+  return '<div class="au"><div class="box"><div class="center" style="margin-bottom:14px">'+small+'</div><h1>Buat akun</h1><p class="sub" style="margin:0 0 16px">Mulai pantau tugasmu hari ini.</p><input type="text" id="a-nm" aria-label="Nama" placeholder="Danendra" maxlength="40" autocomplete="name"><input type="email" id="a-em" aria-label="Email" placeholder="nama@kampus.ac.id" autocomplete="email"><input type="password" id="a-pw" aria-label="Kata sandi" placeholder="Minimal 6 karakter" autocomplete="new-password">'+err+'<button class="btn pri" data-dodaftar>Buat akun</button><button class="lk" data-auth="login">Sudah punya akun? Masuk</button>'+note+'</div></div>'}
+function authGo(s){screen=s;aerr="";render();window.scrollTo(0,0)}
+function aFail(m){aerr=m;var e=$("a-err");if(e)e.textContent=m}
+function enterApp(){screen="app";view="home";aerr="";themeApply();render();window.scrollTo(0,0)}
+function doLogin(){
+  var em=($("a-em").value||"").trim().toLowerCase(),pw=$("a-pw").value;
+  if(em.indexOf("@")<1)return aFail("Masukkan email yang valid.");
+  if(!pw)return aFail("Masukkan kata sandi.");
+  var u=A.users.filter(function(x){return x.email===em})[0];
+  if(!u)return aFail("Akun belum terdaftar. Silakan daftar dulu.");
+  hashPw(u.salt,pw).then(function(hh){
+    if(hh!==u.hash)return aFail("Email atau kata sandi salah.");
+    A.session=em;aSave();LS=LS0+":"+em;defaults();var l=lsGet();if(l)apply(l);if(!S.name)S.name=u.name;save();enterApp();toast("Selamat datang, "+(S.name||u.name)+"!")})}
+function doDaftar(){
+  var nm=$("a-nm").value.trim(),em=($("a-em").value||"").trim().toLowerCase(),pw=$("a-pw").value;
+  if(!nm)return aFail("Masukkan nama kamu.");
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em))return aFail("Masukkan email yang valid.");
+  if(pw.length<6)return aFail("Kata sandi minimal 6 karakter.");
+  if(A.users.some(function(x){return x.email===em}))return aFail("Email sudah terdaftar. Silakan masuk.");
+  var salt=Math.random().toString(36).slice(2)+Date.now().toString(36),first=A.users.length===0;
+  hashPw(salt,pw).then(function(hh){
+    A.users.push({email:em,name:nm,salt:salt,hash:hh});A.session=em;aSave();
+    LS=LS0+":"+em;
+    if(!first)defaults();
+    S.name=nm;save();enterApp();toast("Akun dibuat. Selamat datang, "+nm+"!")})}
+function doLogout(){
+  A.session=null;aSave();fStop();focus.t=1500;LS=LS0;defaults();screen="login";aerr="";closeMod();render();window.scrollTo(0,0)}
 function render(){
+  document.body.classList.toggle("auth",screen!=="app");
+  if(screen!=="app"){$("main").innerHTML=authView();return}
   var y=window.scrollY;shell();$("main").innerHTML=V[view]();window.scrollTo(0,y)}
 function go(v){view=v;render();window.scrollTo(0,0)}
 
@@ -369,10 +435,14 @@ setInterval(function(){if(view==="home"||view==="tugas"){if(!$("ov").classList.c
 // ---- Events
 var armed=null;
 document.addEventListener("click",function(e){
-  var el=e.target.closest("[data-go],[data-more],[data-add],[data-tog],[data-open],[data-f],[data-day],[data-cm],[data-nt],[data-perm],[data-fr],[data-fx],[data-th],[data-ex],[data-clr],[data-close],[data-sv],[data-st],[data-sd],[data-sa],[data-del],[data-edit],[data-ff]");
+  var el=e.target.closest("[data-auth],[data-dologin],[data-dodaftar],[data-logout],[data-go],[data-more],[data-add],[data-tog],[data-open],[data-f],[data-day],[data-cm],[data-nt],[data-perm],[data-fr],[data-fx],[data-th],[data-ex],[data-clr],[data-close],[data-sv],[data-st],[data-sd],[data-sa],[data-del],[data-edit],[data-ff]");
   if(!el){if(e.target===$("ov"))closeMod();return}
   var d=el.dataset;
-  if(d.go!==undefined){e.preventDefault();closeMod();go(d.go)}
+  if(d.auth!==undefined)authGo(d.auth);
+  else if(d.dologin!==undefined)doLogin();
+  else if(d.dodaftar!==undefined)doDaftar();
+  else if(d.logout!==undefined)doLogout();
+  else if(d.go!==undefined){e.preventDefault();closeMod();go(d.go)}
   else if(d.more!==undefined){openMod(["bell","fokus","user"].map(function(k){var v=VIEWS.filter(function(x){return x[0]===k})[0];return '<button class="morel" data-go="'+k+'">'+ICON[v[2]]+v[1]+'</button>'}).join(""))}
   else if(d.add!==undefined)taskForm();
   else if(d.tog){var t=S.tasks.find(function(x){return x.id===d.tog});t.done=!t.done;save();render();if(t.done)toast("Tugas selesai ✓")}
@@ -402,10 +472,12 @@ document.addEventListener("input",function(e){
 function input(){}
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape")closeMod();
+  if(e.key==="Enter"&&screen!=="app"&&/^a-/.test(e.target.id||"")){var ab=document.querySelector("[data-dologin],[data-dodaftar]");if(ab)ab.click()}
   if(e.key==="Enter"&&e.target.id==="f-s"){var b=document.querySelector("[data-sa]");if(b)b.click()}
   if(e.key==="Enter"&&(e.target.id==="f-t")){var s=document.querySelector("[data-sv]");if(s)s.click()}});
 init();
 })();
 </script>
+<script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
 </body>
 </html>
